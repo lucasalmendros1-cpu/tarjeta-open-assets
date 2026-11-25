@@ -74,12 +74,9 @@ const canvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d");
 host.appendChild(canvas);
 host.style.opacity = "0";
-// Phone frames have no transparency (7 MB instead of 17): they are pre-painted on #0b0913,
-// a touch darker than the section background. "lighten" lets the background and the title
-// win wherever the frame is just that dark, so the opaque frame looks transparent.
-// (Set on the host, not the canvas: the host is its own stacking context, and a blended
-// canvas inside it would only blend with the empty host.)
-if (SMALL) host.style.mixBlendMode = "lighten";
+// (Phone frames are transparent like the desktop ones, with lighter, lossy transparency:
+// 12 MB instead of 17. Opaque frames blended with "lighten" were 7 MB, but let the title show
+// through the darker parts of the cards, so the cards looked like they were behind it.)
 
 /* ---------------- Frames ---------------- */
 // Frames are kept as compressed Blobs (~50 KB each). Decoding hundreds up front would
