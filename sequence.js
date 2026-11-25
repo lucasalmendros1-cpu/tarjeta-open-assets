@@ -333,24 +333,32 @@ function draw(seq, frameF, wrap) {
 }
 
 /* ---------------- Motion ---------------- */
-// mode: "hidden" → "intro" → "loop"   (phones, frames still downloading: "hidden" → "poster" → "loop")
+// mode: "hidden" → "intro" → "loop"
+// frames still downloading when the visitor arrives: "hidden" → "poster" → "posterOut" → "intro" → "loop"
 const state = { mode: "hidden", introStart: 0, idle: 0, scroll: 0, scrollTarget: 0 };
 let dirty = true, lastKey = "";
+
+// The appear animation (cards dealt in one by one), from an empty canvas.
+function startIntro() {
+  ctx.clearRect(0, 0, bw, bh);                       // the still frame must not linger
+  gsap.set(host, { opacity: 1, y: 0 });
+  state.mode = "intro"; state.introStart = performance.now(); lastBase = -1; dirty = true;
+}
 
 function frame(now, dt) {
   state.scroll += (state.scrollTarget - state.scroll) * (1 - Math.exp(-dt * 3.5));
 
   if (state.mode === "poster") {
-    if (loopReady()) {
-      // every frame is in: start moving from the frame on screen (loop frame 0)
-      state.mode = "loop";
-      state.idle = -state.scroll;
-      lastBase = -1; dirty = true;
-    } else {
+    if (!(loopReady() && introReady())) {
       if (dirty) { draw(LOOP, 0, true); lastKey = "p"; dirty = false; }
       return;
     }
+    // Everything is in: the still cards fade out, then the full appear animation plays.
+    state.mode = "posterOut";
+    lastBase = -1; want(INTRO, 0, 1, false);         // decode the first intro frames during the fade
+    gsap.to(host, { opacity: 0, duration: 0.5, ease: "power2.inOut", onComplete: startIntro });
   }
+  if (state.mode === "posterOut") return;          // the canvas keeps the still frame while it fades
 
   if (state.mode === "intro") {
     const f = ((now - state.introStart) / 1000) * INTRO_FPS;
@@ -436,14 +444,14 @@ function enterCards() {
     return;
   }
   if (POSTER && !(loopReady() && introReady())) {
-    // phones, frames still downloading: the still cards now, the motion once everything is in
+    // frames still downloading: the still cards now; once everything is in they fade out and
+    // the appear animation plays (see "poster" in frame()). Fast connections never get here.
     state.mode = "poster"; lastBase = -1; dirty = true;
     gsap.fromTo(host, { opacity: 0, y: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" });
     return;
   }
   gsap.set(host, { opacity: 1, y: 0 });
-  // (the host may have been hidden while waiting for the intro below: show it again)
-  const begin = () => { gsap.set(host, { opacity: 1, y: 0 }); state.mode = "intro"; state.introStart = performance.now(); lastBase = -1; dirty = true; };
+  const begin = startIntro;
   lastBase = -1; want(INTRO, 0, 1, false);          // start decoding the first intro frames right away
   if (introReady()) return begin();
   // intro still downloading: wait for it (briefly), otherwise fall back to the loop with a fade
