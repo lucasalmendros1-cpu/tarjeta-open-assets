@@ -30,8 +30,12 @@ const SEQ_BASE = (() => {
 })();
 gsap.registerPlugin(ScrollTrigger);
 
-const LOOP = { count: 480, src: (i) => `${SEQ_BASE}f_${String(i).padStart(3, "0")}.webp` };
-const INTRO = { count: 108, src: (i) => `${SEQ_BASE}intro_${String(i).padStart(3, "0")}.webp` };
+/* Phones get a lighter copy of the same frames (1000×500 in seq/m/): the canvas there is
+   ~1000 device px wide anyway, and each frame costs ~2.5× less to download and decode. */
+const SMALL = Math.min(window.innerWidth, (window.screen && window.screen.width) || Infinity) <= 820;
+const SEQ_DIR = SMALL ? SEQ_BASE + "m/" : SEQ_BASE;
+const LOOP = { count: 480, src: (i) => `${SEQ_DIR}f_${String(i).padStart(3, "0")}.webp` };
+const INTRO = { count: 108, src: (i) => `${SEQ_DIR}intro_${String(i).padStart(3, "0")}.webp` };
 const INTRO_FPS = 24;
 const DEG_PER_FRAME = 180 / LOOP.count;  // 0.375° per loop frame: ~24 real frames/s at the idle drift
 const IDLE_SPEED = 9;      // deg/s (= 24 loop frames per second, same pace the intro ends on)
@@ -96,7 +100,7 @@ const introReady = () => INTRO.ready.every(Boolean);
  * Performance: the canvas covers only the frame (not the whole viewport) and its
  * backing store never exceeds the render's own resolution (1600 px wide) — on a
  * Retina screen a 2× canvas would push ~4× the pixels for zero extra detail. */
-const SRC_W = 1600, SRC_H = 800;
+const SRC_W = SMALL ? 1000 : 1600;
 let rect = { x: 0, y: 0, w: 0, h: 0 }, bw = 0, bh = 0;   // bw/bh: backing size in px
 function layout() {
   const w = host.clientWidth, h = host.clientHeight;
@@ -284,8 +288,22 @@ function loop(now) {
 function startLoop() { if (running) return; running = true; last = performance.now(); requestAnimationFrame(loop); }
 function stopLoop() { running = false; }
 
-// start fetching well before the section is reached; render only while visible
-new IntersectionObserver(([e]) => { if (e.isIntersecting) startLoading(); }, { rootMargin: "200% 0px" }).observe(section);
+// Start fetching well before the section is reached, but not while the hero video is still
+// downloading: the section sits right under the hero, and ~600 frame requests competing
+// with the video made the first screen slow. Wait for the video (or a scroll, or 6 s).
+let heroSettled = false, nearSection = false;
+const settle = () => { if (heroSettled) return; heroSettled = true; if (nearSection) startLoading(); };
+const heroVideo = document.querySelector("[data-hero-video]");
+if (!heroVideo || heroVideo.readyState >= 4) heroSettled = true;
+else {
+  heroVideo.addEventListener("canplaythrough", settle, { once: true });
+  heroVideo.addEventListener("error", settle, { once: true });
+  setTimeout(settle, 6000);
+  const onScroll = () => { if (window.scrollY > window.innerHeight * 0.25) { window.removeEventListener("scroll", onScroll); settle(); } };
+  window.addEventListener("scroll", onScroll, { passive: true });
+}
+new IntersectionObserver(([e]) => { nearSection = e.isIntersecting; if (nearSection && heroSettled) startLoading(); }, { rootMargin: "200% 0px" }).observe(section);
+// render only while visible
 new IntersectionObserver(([e]) => { e.isIntersecting ? startLoop() : stopLoop(); }, { rootMargin: "10% 0px" }).observe(section);
 
 /* ---------------- GSAP: pin, scroll rotation, entrance ---------------- */
