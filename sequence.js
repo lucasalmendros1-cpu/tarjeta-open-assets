@@ -34,9 +34,13 @@ gsap.registerPlugin(ScrollTrigger);
    ~1000 device px wide anyway, and each frame costs ~2.5× less to download and decode. */
 const SMALL = Math.min(window.innerWidth, (window.screen && window.screen.width) || Infinity) <= 820;
 const SEQ_DIR = SMALL ? SEQ_BASE + "m/" : SEQ_BASE;
-const LOOP = { count: 480, src: (i) => `${SEQ_DIR}f_${String(i).padStart(3, "0")}.webp` };
-const INTRO = { count: 108, src: (i) => `${SEQ_DIR}intro_${String(i).padStart(3, "0")}.webp` };
-const INTRO_FPS = 24;
+/* Phones also play every other frame (240 + 54) and cross-fade between them: half the
+   download (the motion is complete much sooner on a fresh load) and half the decoding. */
+const STEP = SMALL ? 2 : 1;
+const name = (prefix, i) => `${SEQ_DIR}${prefix}${String(i * STEP).padStart(3, "0")}.webp`;
+const LOOP = { count: 480 / STEP, src: (i) => name("f_", i) };
+const INTRO = { count: 108 / STEP, src: (i) => name("intro_", i) };
+const INTRO_FPS = 24 / STEP;
 const DEG_PER_FRAME = 180 / LOOP.count;  // 0.375° per loop frame: ~24 real frames/s at the idle drift
 const IDLE_SPEED = 9;      // deg/s (= 24 loop frames per second, same pace the intro ends on)
 const SWEEP = 200;         // deg added while the section travels through the viewport
@@ -102,15 +106,32 @@ const introReady = () => INTRO.ready.every(Boolean);
  * Retina screen a 2× canvas would push ~4× the pixels for zero extra detail. */
 const SRC_W = SMALL ? 1000 : 1600;
 let rect = { x: 0, y: 0, w: 0, h: 0 }, bw = 0, bh = 0;   // bw/bh: backing size in px
+/* Portrait screens: the cards are limited by the width, so with the title at the top and
+   the lead at the bottom of a tall screen there was empty space around them. There the
+   group is centred and the lead sits just as far below the title as the cards need. */
+const MAX_W = 1.25;                     // the frame may be this much wider than the screen
+let overTop = 0, overBottom = 0;        // how far the card band reaches over the title / towards the lead
+function fitGap(w, h) {
+  if (window.innerHeight <= window.innerWidth) {
+    pin.classList.remove("is-compact"); lead.style.marginTop = "";
+    overTop = h * 0.1; overBottom = h * 0.015;
+    return;
+  }
+  pin.classList.add("is-compact");
+  const band = (w * MAX_W / FRAME_ASPECT) * CONTENT_H;   // card band height at full width
+  overTop = band * 0.12; overBottom = band * 0.14;       // the cards just step on "Crédito", air above the lead
+  lead.style.marginTop = Math.max(24, Math.round(band - overTop + overBottom)) + "px";
+}
 function layout() {
   const w = host.clientWidth, h = host.clientHeight;
   if (!w || !h) return;
+  fitGap(w, h);
   const pr = pin.getBoundingClientRect();
-  const top = title.getBoundingClientRect().bottom - pr.top - h * 0.1;
-  const bottom = lead.getBoundingClientRect().top - pr.top - h * 0.015;
+  const top = title.getBoundingClientRect().bottom - pr.top - overTop;
+  const bottom = lead.getBoundingClientRect().top - pr.top - overBottom;
   let fh = Math.max(160, bottom - top) / CONTENT_H;
   let fw = fh * FRAME_ASPECT;
-  if (fw > w * 1.25) { fw = w * 1.25; fh = fw / FRAME_ASPECT; }   // the frame has empty margins at the sides
+  if (fw > w * MAX_W) { fw = w * MAX_W; fh = fw / FRAME_ASPECT; }   // the frame has empty margins at the sides
   rect = { x: (w - fw) / 2, y: (top + bottom) / 2 - fh / 2, w: fw, h: fh };
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2);

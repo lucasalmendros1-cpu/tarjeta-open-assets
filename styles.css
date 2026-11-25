@@ -239,6 +239,7 @@ html.lenis, html.lenis body { height: auto; }
   background-position: var(--sheen, 0%) 0;
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+.orbit__pin.is-compact { justify-content: center; }   /* portrait: set by sequence.js, which also sets the lead's gap */
 .orbit__canvas { position: absolute; inset: 0; z-index: 5; pointer-events: none; } /* cards sit above title and lead */
 .orbit__canvas canvas { display: block; width: 100%; height: 100%; }
 .orbit__lead { position: relative; z-index: 2; margin: 0 auto; }
