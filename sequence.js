@@ -78,26 +78,32 @@ function queueFor(seq, steps) {
   for (const step of steps) for (let i = 0; i < seq.count; i += step) if (!seen.has(i)) { seen.add(i); order.push([seq, i]); }
   return order;
 }
-let loadingStarted = false;
+let loadingStarted = false, queue = [], inFlight = 0;
+// While the hero video is still downloading only 2 frames are fetched at a time (low
+// priority), so the video is not slowed down but the intro is ready by the time the
+// visitor gets here. Once the video can play, or the visitor reaches the cards: 6.
+let heroSettled = false;
+const maxInFlight = () => (heroSettled ? 6 : 2);
+function nextFetch() {
+  while (inFlight < maxInFlight() && queue.length) {
+    const [seq, i] = queue.shift();
+    inFlight++;
+    fetch(seq.src(i), heroSettled ? undefined : { priority: "low" })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
+      .then((blob) => { seq.imgs[i] = blob; seq.ready[i] = 1; dirty = true; pump(); })
+      .catch(() => {})
+      .finally(() => { inFlight--; nextFetch(); });
+  }
+}
 function startLoading() {
-  if (loadingStarted) return;
+  if (loadingStarted) return nextFetch();
   loadingStarted = true;
   // intro first (it plays first, in order), then the loop coarse → fine
-  const queue = [...queueFor(INTRO, [1]), ...queueFor(LOOP, [32, 16, 8, 4, 2, 1])];
-  let inFlight = 0;
-  const next = () => {
-    while (inFlight < 6 && queue.length) {
-      const [seq, i] = queue.shift();
-      inFlight++;
-      fetch(seq.src(i))
-        .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
-        .then((blob) => { seq.imgs[i] = blob; seq.ready[i] = 1; dirty = true; pump(); })
-        .catch(() => {})
-        .finally(() => { inFlight--; next(); });
-    }
-  };
-  next();
+  queue = [...queueFor(INTRO, [1]), ...queueFor(LOOP, [32, 16, 8, 4, 2, 1])];
+  nextFetch();
 }
+// The intro did not make it in time and the loop plays instead: fetch the loop first.
+function preferLoop() { queue.sort((a, b) => (a[0] === LOOP ? 0 : 1) - (b[0] === LOOP ? 0 : 1)); }
 const introReady = () => INTRO.ready.every(Boolean);
 
 /* ---------------- Layout: cards just step on "Crédito", above the lead ----------------
@@ -309,11 +315,10 @@ function loop(now) {
 function startLoop() { if (running) return; running = true; last = performance.now(); requestAnimationFrame(loop); }
 function stopLoop() { running = false; }
 
-// Start fetching well before the section is reached, but not while the hero video is still
-// downloading: the section sits right under the hero, and ~600 frame requests competing
-// with the video made the first screen slow. Wait for the video (or a scroll, or 6 s).
-let heroSettled = false, nearSection = false;
-const settle = () => { if (heroSettled) return; heroSettled = true; if (nearSection) startLoading(); };
+// Start fetching well before the section is reached. The section sits right under the hero,
+// so ~600 frame requests at full speed would compete with the hero video: until the video can
+// play (or the visitor scrolls, or 6 s pass) frames come in slowly (see maxInFlight).
+const settle = () => { if (heroSettled) return; heroSettled = true; if (loadingStarted) nextFetch(); };
 const heroVideo = document.querySelector("[data-hero-video]");
 if (!heroVideo || heroVideo.readyState >= 4) heroSettled = true;
 else {
@@ -323,7 +328,7 @@ else {
   const onScroll = () => { if (window.scrollY > window.innerHeight * 0.25) { window.removeEventListener("scroll", onScroll); settle(); } };
   window.addEventListener("scroll", onScroll, { passive: true });
 }
-new IntersectionObserver(([e]) => { nearSection = e.isIntersecting; if (nearSection && heroSettled) startLoading(); }, { rootMargin: "200% 0px" }).observe(section);
+new IntersectionObserver(([e]) => { if (e.isIntersecting) startLoading(); }, { rootMargin: "200% 0px" }).observe(section);
 // render only while visible
 new IntersectionObserver(([e]) => { e.isIntersecting ? startLoop() : stopLoop(); }, { rootMargin: "10% 0px" }).observe(section);
 
@@ -352,7 +357,8 @@ function enterCards() {
     return;
   }
   gsap.set(host, { opacity: 1, y: 0 });
-  const begin = () => { state.mode = "intro"; state.introStart = performance.now(); lastBase = -1; dirty = true; };
+  // (the host may have been hidden while waiting for the intro below: show it again)
+  const begin = () => { gsap.set(host, { opacity: 1, y: 0 }); state.mode = "intro"; state.introStart = performance.now(); lastBase = -1; dirty = true; };
   lastBase = -1; want(INTRO, 0, 1, false);          // start decoding the first intro frames right away
   if (introReady()) return begin();
   // intro still downloading: wait for it (briefly), otherwise fall back to the loop with a fade
@@ -360,6 +366,7 @@ function enterCards() {
   const poll = () => {
     if (introReady()) return begin();
     if (performance.now() - t0 > 2500) {
+      preferLoop();
       state.mode = "loop"; state.idle = -state.scroll; dirty = true;
       gsap.fromTo(host, { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "power2.out" });
       return;
@@ -379,7 +386,7 @@ function exitCards() {
 }
 ScrollTrigger.create({
   trigger: section, start: "top 55%",
-  onEnter: () => { startLoading(); startLoop(); enterCards(); },
+  onEnter: () => { settle(); startLoading(); startLoop(); enterCards(); },
   onLeaveBack: exitCards,
 });
 
