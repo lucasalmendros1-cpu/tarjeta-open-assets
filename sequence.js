@@ -17,6 +17,8 @@
  */
 (() => {
 "use strict";
+// the ?v= this script was loaded with is also used for the frame pack, so bumping it refreshes both
+const VER = (() => { try { const v = new URL(document.currentScript.src).searchParams.get("v"); return v ? `?v=${v}` : ""; } catch (e) { return ""; } })();
 const { gsap, ScrollTrigger } = window;
 const orbitEl = document.querySelector("[data-orbit]");
 if (!gsap || !ScrollTrigger || !orbitEl) return;
@@ -98,9 +100,41 @@ function nextFetch() {
 function startLoading() {
   if (loadingStarted) return nextFetch();
   loadingStarted = true;
-  // intro first (it plays first, in order), then the loop coarse → fine
-  queue = [...queueFor(INTRO, [1]), ...queueFor(LOOP, [32, 16, 8, 4, 2, 1])];
-  nextFetch();
+  loadPack().catch(() => {
+    // pack not available: one request per frame, intro first, then the loop coarse → fine
+    queue = [...queueFor(INTRO, [1]), ...queueFor(LOOP, [32, 16, 8, 4, 2, 1])]
+      .filter(([seq, i]) => !seq.ready[i]);
+    nextFetch();
+  });
+}
+/* All frames of a set come in ONE request (pack.bin, built by herramientas/armar-paquetes.js),
+   already in the order they are needed. It is read as a stream: each frame becomes usable as
+   soon as its bytes have arrived. ~600 separate requests took 15–30 s on a first visit, because
+   a CDN answers each file it has not cached yet only after ~0.3 s, however small it is. */
+async function loadPack() {
+  const man = await (await fetch(`${SEQ_DIR}pack.json${VER}`)).json();
+  if (man.step !== STEP || man.intro !== INTRO.count || man.loop !== LOOP.count) throw new Error("pack");
+  const res = await fetch(`${SEQ_DIR}pack.bin${VER}`, { priority: heroSettled ? "high" : "low" });
+  if (!res.ok || !res.body) throw new Error("pack");
+  const total = man.frames.reduce((a, f) => a + f[2], 0);
+  const buf = new Uint8Array(total);
+  const reader = res.body.getReader();
+  let got = 0, k = 0, off = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf.set(value, got);
+    got += value.length;
+    while (k < man.frames.length && off + man.frames[k][2] <= got) {
+      const [kind, i, len] = man.frames[k];
+      const seq = kind ? LOOP : INTRO;
+      seq.imgs[i] = new Blob([buf.subarray(off, off + len)], { type: "image/webp" });
+      seq.ready[i] = 1;
+      off += len; k++;
+    }
+    dirty = true; pump();
+  }
+  if (k < man.frames.length) throw new Error("pack incomplete");
 }
 // The intro did not make it in time and the loop plays instead: fetch the loop first.
 function preferLoop() { queue.sort((a, b) => (a[0] === LOOP ? 0 : 1) - (b[0] === LOOP ? 0 : 1)); }
