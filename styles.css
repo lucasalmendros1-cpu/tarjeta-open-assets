@@ -1,0 +1,275 @@
+/* ---------- Fonts ---------- */
+@font-face { font-family: "Aeonik"; src: url("fonts/Aeonik-Regular.otf") format("opentype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Aeonik"; src: url("fonts/Aeonik-Medium.otf") format("opentype"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Aeonik"; src: url("fonts/Aeonik-Bold.otf") format("opentype"); font-weight: 700; font-display: swap; }
+
+/* ---------- Tokens (from Figma) ---------- */
+:root {
+  --bg: #0e0c16;
+  --violet: #6149da;          /* Violeta Original */
+  --violet-200: #7c68e0;      /* V200 */
+  --violet-300: #9b87ff;
+  --violet-ink: #422abf;
+  --violet-muted: #9b8ee0;
+  --ink-50: #ebebed;          /* Violeta Oscuro V50 */
+  --title-dim: #2b2640;
+  --white-5: rgba(255, 255, 255, 0.05);
+  --card-grad: linear-gradient(132deg, #1e1b2d 0%, #181623 100%);
+  --shadow-card: 0 4px 64px rgba(0, 0, 0, 0.04);
+
+  /* Motion (Emil Kowalski curves) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --container: 1120px;
+  --gutter: clamp(16px, 3vw, 43px);
+  --nav-h: 0px;            /* height of the site navbar [data-nav], measured by main.js */
+  --hero-inset: clamp(16px, 3.4vw, 52px); /* same distance to the frame on every side */
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+/* Lenis (smooth scroll) */
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-stopped { overflow: hidden; }
+/* Scoped to these sections: the rest of the page (Webflow navbar and modules) keeps its own styles. */
+.hero, .orbit {
+  background: var(--bg);
+  color: #fff;
+  font-family: "Aeonik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.orbit, .orbit__pin { overflow-x: clip; }   /* the card canvas is wider than the viewport */
+/* Same low specificity as webflow.css element rules, loaded after it, so these win and the classes below stay in charge. */
+:where(.hero, .orbit) :is(img, video) { display: block; max-width: 100%; }
+:where(.hero, .orbit) a { color: inherit; text-decoration: none; }
+:where(.hero, .orbit) :is(h1, h2, h3, p) { margin: 0; }
+:where(.hero, .orbit) :focus-visible { outline: 2px solid var(--violet-300); outline-offset: 3px; border-radius: 8px; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  white-space: nowrap; cursor: pointer; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 160ms var(--ease-out), background-color 200ms ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn__arrow { transition: transform 200ms var(--ease-out); }
+
+.btn--hero {
+  height: 51px; padding: 0 22px 0 24px; gap: 12px;
+  border-radius: 999px; background: var(--violet-200);
+  font-size: 20px; font-weight: 500;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn--hero:hover { background: #8a78e6; }
+  .btn:hover .btn__arrow { transform: translateX(3px); }
+}
+
+/* ---------- Hero ---------- */
+/* Hero = first viewport. The frame keeps the video ratio (16:9) and is "contained"
+   in the space left by the site navbar, so the whole video is always visible, on any screen.
+   --nav-offset: only when the navbar is fixed (overlays the page), pushes the hero below it. */
+.hero {
+  margin-top: var(--nav-offset, 0px);
+  height: calc(100vh - var(--nav-h)); height: calc(100svh - var(--nav-h));
+  padding: var(--gutter);
+  display: flex; align-items: center; justify-content: center;
+}
+.hero__frame {
+  position: relative; isolation: isolate;
+  aspect-ratio: 16 / 9;
+  width: min(100%, calc((100svh - var(--nav-h) - 2 * var(--gutter)) * 16 / 9));
+  container-type: inline-size;   /* the message card scales with the frame (Figma: 1354px wide) */
+  --hero-inset: clamp(14px, 3.84cqw, 52px);
+  border-radius: clamp(20px, 3.3cqw, 45px); overflow: hidden;
+  background: #beb4f0 url("assets/video/hero-preview.jpg") center / cover no-repeat;
+  /* subtle depth on scroll (set by JS) */
+  transform: scale(var(--hero-scale, 1));
+  transform-origin: 50% 0;
+}
+.hero__video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2;
+  opacity: 0; transition: opacity 600ms ease;
+}
+.hero__video.is-ready { opacity: 1; transition-duration: 700ms; }
+
+/* Preview + loading bar (Figma 42:9087): the still shows instantly, the bar tracks the
+   download, and once the video can play through both cross-fade away. */
+.hero__preview {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1;
+  transition: opacity 700ms ease;
+}
+.hero__frame.is-video-ready .hero__preview { opacity: 0; }
+.hero__progress {
+  position: absolute; z-index: 1;
+  left: 4.06cqw; right: 4.87cqw; bottom: 1.7cqw;    /* 55 / 66 / 23 px on the 1354px frame */
+  height: clamp(3px, 0.37cqw, 5px);
+  background: rgba(255, 255, 255, 0.5); overflow: hidden; pointer-events: none;
+  transition: opacity 400ms ease 250ms;
+}
+.hero__progress-fill {
+  position: absolute; inset: 0; background: #fff;
+  transform-origin: left center; transform: scaleX(var(--p, 0));
+  transition: transform 350ms var(--ease-out);
+}
+.hero__frame.is-video-ready .hero__progress { opacity: 0; }
+.hero__scrim {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 80% at 100% 100%, rgba(14, 12, 22, 0.35), transparent 55%);
+}
+
+.hero__card {
+  position: absolute; right: var(--hero-inset); bottom: var(--hero-inset);
+  width: clamp(280px, 44.8cqw, 606px);
+  padding: clamp(18px, 2.66cqw, 36px) clamp(18px, 2.73cqw, 37px) clamp(18px, 2.66cqw, 36px) clamp(18px, 2.88cqw, 39px);
+  border-radius: clamp(18px, 2.78cqw, 37.6px); background: var(--violet);
+  display: grid; gap: clamp(8px, 1.03cqw, 14px);
+  box-shadow: 0 24px 60px -20px rgba(20, 10, 70, 0.55);
+}
+.hero__title { display: grid; font-weight: 400; letter-spacing: 0.24px; }
+.hero__title-strong { font-weight: 700; font-size: clamp(22px, 3.55cqw, 48px); line-height: 1.2; }
+.hero__title-sub { font-size: clamp(17px, 2.66cqw, 36px); line-height: 1.2; }
+.hero__card .btn--hero {
+  justify-self: end; margin-top: calc(-2.95cqw);
+  height: clamp(36px, 3.77cqw, 51px); padding: 0 clamp(14px, 1.63cqw, 22px) 0 clamp(16px, 1.77cqw, 24px);
+  font-size: clamp(14px, 1.48cqw, 20px);
+}
+
+.hero__controls { position: absolute; left: var(--hero-inset); bottom: var(--hero-inset); display: flex; gap: 8px; }
+.hero__ctrl {
+  height: 40px; min-width: 40px; border: 0; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+  font: 500 14px/1 "Aeonik", system-ui, sans-serif; letter-spacing: -0.1px;
+  color: #fff; background: rgba(14, 12, 22, 0.4);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 200ms ease, transform 160ms var(--ease-out);
+}
+.hero__ctrl:active { transform: scale(0.95); }
+.hero__sound { padding: 0 14px 0 12px; }
+.hero__sound svg { flex-shrink: 0; }
+.hero__sound .i-waves, .hero__sound .i-x { transition: opacity 150ms ease; }
+.hero__sound .i-waves { opacity: 0; }
+.hero__sound[aria-pressed="true"] .i-waves { opacity: 1; }
+.hero__sound[aria-pressed="true"] .i-x { opacity: 0; }
+/* label collapses once sound is on — the icon alone says "mute" */
+.hero__sound-label {
+  display: inline-block; overflow: hidden; white-space: nowrap; max-width: 140px;
+  transition: max-width 260ms var(--ease-out), opacity 180ms ease;
+}
+.hero__sound[aria-pressed="true"] { padding: 0 11px; }
+.hero__sound[aria-pressed="true"] .hero__sound-label { max-width: 0; opacity: 0; margin-left: -8px; }
+/* Volume: hidden while muted, slides out next to the sound button once sound is on */
+.hero__volume {
+  display: inline-flex; align-items: center; height: 40px; overflow: hidden;
+  max-width: 0; padding: 0; opacity: 0; margin-left: -8px;
+  border-radius: 999px; background: rgba(14, 12, 22, 0.4);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: max-width 280ms var(--ease-out), padding 280ms var(--ease-out), opacity 180ms ease, margin 280ms var(--ease-out);
+}
+.hero__controls.has-sound .hero__volume { max-width: 140px; padding: 0 14px; opacity: 1; margin-left: 0; }
+.hero__volume input {
+  -webkit-appearance: none; appearance: none; width: 96px; height: 20px; margin: 0;
+  background: transparent; cursor: pointer; --v: 80%;
+}
+.hero__volume input::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 4px;
+  background: linear-gradient(to right, #fff var(--v), rgba(255, 255, 255, 0.28) var(--v));
+}
+.hero__volume input::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.28); }
+.hero__volume input::-moz-range-progress { height: 4px; border-radius: 4px; background: #fff; }
+.hero__volume input::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 160ms var(--ease-out);
+}
+.hero__volume input::-moz-range-thumb {
+  width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); transition: transform 160ms var(--ease-out);
+}
+.hero__volume input:active::-webkit-slider-thumb { transform: scale(1.15); }
+.hero__volume input:active::-moz-range-thumb { transform: scale(1.15); }
+.hero__volume input:focus-visible { outline: none; }
+.hero__volume:focus-within { box-shadow: 0 0 0 2px var(--violet-300); }
+@media (hover: hover) and (pointer: fine) { .hero__volume:hover { background: rgba(14, 12, 22, 0.6); } }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.hero__toggle svg { grid-area: 1 / 1; transition: opacity 150ms ease, transform 200ms var(--ease-out); }
+.hero__toggle { display: grid; place-items: center; width: 40px; padding: 0; }
+.hero__toggle .i-play { opacity: 0; transform: scale(0.6); }
+.hero__toggle[aria-pressed="true"] .i-play { opacity: 1; transform: scale(1); }
+.hero__toggle[aria-pressed="true"] .i-pause { opacity: 0; transform: scale(0.6); }
+@media (hover: hover) and (pointer: fine) { .hero__ctrl:hover { background: rgba(14, 12, 22, 0.6); } }
+
+/* Hero entrance (choreographed: frame → card → button) */
+[data-enter] { opacity: 0; transform: translateY(16px); filter: blur(6px); }
+.is-loaded [data-enter] {
+  opacity: 1; transform: none; filter: none;
+  transition: opacity 700ms var(--ease-out) 250ms, transform 800ms var(--ease-out) 250ms, filter 700ms var(--ease-out) 250ms;
+}
+.is-loaded [data-enter] .btn--hero { animation: btn-in 600ms var(--ease-out) 520ms both; }
+@keyframes btn-in { from { opacity: 0; transform: translateX(-8px); } }
+
+/* ---------- Orbit (rendered sequence) — pinned, full viewport ---------- */
+.orbit { position: relative; }
+.orbit__pin {
+  position: relative; height: 100vh; height: 100svh; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  padding: clamp(56px, 9vh, 96px) 16px clamp(36px, 6vh, 64px);
+}
+.orbit__title {
+  position: relative; z-index: 0;
+  width: min(741px, 92vw);
+  font-weight: 700; font-size: clamp(44px, min(7.2vw, 11vh), 104px); line-height: 1.12; text-align: center;
+  color: var(--title-dim); letter-spacing: -0.01em;
+}
+.orbit__title .w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.02em 0.08em; margin-bottom: -0.08em; }
+.orbit__title .wi, .orbit__title .ch { display: inline-block; will-change: transform; }
+.text-gradient {
+  background: linear-gradient(113.65deg, #6149da 52.76%, #9b87ff 70.04%, #6149da 88.01%);
+  background-size: 200% 100%;
+  background-position: var(--sheen, 0%) 0;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.orbit__canvas { position: absolute; inset: 0; z-index: 5; pointer-events: none; } /* cards sit above title and lead */
+.orbit__canvas canvas { display: block; width: 100%; height: 100%; }
+.orbit__lead { position: relative; z-index: 2; margin: 0 auto; }
+/* JS hides these before the appear plays (so no-JS still shows them) */
+.js-anim .orbit__title .wi, .js-anim .orbit__lead { opacity: 0; }
+
+
+/* ---------- Lead ---------- */
+.lead {
+  width: min(640px, calc(100% - 32px)); margin: 40px auto 0;
+  font-size: clamp(17px, 1.75vw, 25px); line-height: 1.2; letter-spacing: -0.01em;
+  text-align: center; color: var(--ink-50);
+  text-wrap: balance;
+}
+
+.no-js [data-enter] { opacity: 1; transform: none; filter: none; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 960px) {
+  /* phones: video on top (complete, 16:9), message card below it */
+  .hero { height: auto; display: block; }
+  .hero__frame { aspect-ratio: auto; overflow: visible; background: none; border-radius: 0; }
+  .hero__video { position: relative; inset: auto; height: auto; aspect-ratio: 16 / 9; border-radius: 24px; z-index: 0; }
+  .hero__scrim { display: none; }
+  .hero__preview { inset: 0 0 auto 0; height: auto; aspect-ratio: 16 / 9; border-radius: 24px; }
+  .hero__progress { bottom: auto; top: calc(56.25cqw - 1.7cqw - 4px); }
+  .hero__card { position: relative; left: auto; right: auto; bottom: auto; width: auto; margin-top: 16px; padding: 24px; border-radius: 24px; }
+  .hero__title-strong { font-size: 32px; }
+  .hero__title-sub { font-size: 24px; }
+  .hero__card .btn--hero { margin-top: 4px; justify-self: start; height: 46px; font-size: 18px; }
+  .hero__controls { top: 12px; right: 12px; left: auto; bottom: auto; }
+}
+
+/* ---------- Reduced motion: keep fades, drop movement ---------- */
+@media (prefers-reduced-motion: reduce) {
+  [data-enter] { transform: none !important; filter: none !important; }
+  .is-loaded [data-enter] .btn--hero { animation: none; }
+  .hero__frame { transform: none; }
+}

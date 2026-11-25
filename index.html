@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es-AR" class="no-js">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tarjeta Open de Crédito | Brubank</title>
+  <meta name="description" content="Pedí tu Tarjeta Open de crédito desde la app. Empezá con $100 USD de respaldo y ampliá tu límite cuando quieras." />
+  <meta name="theme-color" content="#0e0c16" />
+  <link rel="preload" href="fonts/Aeonik-Regular.otf" as="font" type="font/otf" crossorigin />
+  <link rel="preload" href="fonts/Aeonik-Bold.otf" as="font" type="font/otf" crossorigin />
+  <link rel="preload" href="assets/video/hero-preview.jpg" as="image" fetchpriority="high" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Standalone demo only: in Webflow the page (navbar, modules, background) comes from the Designer. -->
+  <style>body { margin: 0; background: #0e0c16; }</style>
+  <script>
+    /* A reload always starts the experience from the top (no restored scroll position). */
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    window.addEventListener("beforeunload", function () { window.scrollTo(0, 0); });
+  </script>
+</head>
+<body>
+  <main>
+    <!-- Hero -->
+    <section class="hero" aria-label="Tarjeta Open">
+      <div class="hero__frame" data-hero>
+        <video class="hero__video" data-hero-video
+          src="assets/video/hero.mp4" poster="assets/video/hero-preview.jpg"
+          autoplay muted loop playsinline preload="auto" aria-hidden="true"></video>
+        <!-- Shown while the video downloads (slow connections), then cross-fades to the video -->
+        <img class="hero__preview" src="assets/video/hero-preview.jpg" alt="" aria-hidden="true" fetchpriority="high" />
+        <div class="hero__progress" data-video-progress role="progressbar" aria-label="Cargando video"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="hero__progress-fill"></span></div>
+        <div class="hero__scrim" aria-hidden="true"></div>
+
+        <div class="hero__card" data-enter>
+          <h1 class="hero__title">
+            <span class="hero__title-strong">¿Cansado de rebotar?</span>
+            <span class="hero__title-sub">Descubrí la tarjeta de<br />crédito Open</span>
+          </h1>
+          <a class="btn btn--hero" href="#tarjeta">
+            <span>Pedí tu tarjeta</span>
+            <img class="btn__arrow" src="assets/figma/a0f8b.svg" width="5" height="9" alt="" />
+          </a>
+        </div>
+
+        <div class="hero__controls">
+          <button class="hero__ctrl hero__sound" type="button" data-sound-toggle aria-pressed="false" aria-label="Activar sonido">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+              <path d="M3 7h2.6L9 4.2v9.6L5.6 11H3a.8.8 0 0 1-.8-.8V7.8A.8.8 0 0 1 3 7Z" fill="currentColor"/>
+              <g class="i-waves" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.6 6.6a3.4 3.4 0 0 1 0 4.8"/><path d="M13.6 4.6a6.2 6.2 0 0 1 0 8.8"/></g>
+              <g class="i-x" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m11.5 7 4 4M15.5 7l-4 4"/></g>
+            </svg>
+            <span class="hero__sound-label" data-sound-label>Activar sonido</span>
+          </button>
+          <label class="hero__volume">
+            <span class="sr-only">Volumen del video</span>
+            <input type="range" min="0" max="1" step="0.01" value="0.8" data-volume />
+          </label>
+          <button class="hero__ctrl hero__toggle" type="button" data-video-toggle aria-label="Pausar video" aria-pressed="false">
+            <svg class="i-pause" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="8.5" y="2" width="3" height="10" rx="1" fill="currentColor"/></svg>
+            <svg class="i-play" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.6v8.8a.8.8 0 0 0 1.2.7l7-4.4a.8.8 0 0 0 0-1.4l-7-4.4A.8.8 0 0 0 4 2.6Z" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Orbit carousel (Blender-rendered sequence) — pinned full viewport -->
+    <section class="orbit" id="tarjeta" data-orbit aria-label="Tarjeta Open de Crédito">
+      <div class="orbit__pin" data-orbit-pin>
+        <h2 class="orbit__title" data-orbit-title>
+          <span class="w"><span class="wi">Tarjeta</span></span>
+          <span class="w"><span class="wi text-gradient">Open</span></span>
+          <br />
+          <span class="w"><span class="wi">de</span></span>
+          <span class="w"><span class="wi" data-split>Crédito</span></span>
+        </h2>
+        <div class="orbit__canvas" data-orbit-canvas role="img"
+             aria-label="Tarjetas Open de crédito violeta, rosa, verde y bordó girando en órbita"></div>
+        <p class="lead orbit__lead" data-orbit-lead>
+          Pedí tu Tarjeta Open de crédito desde la app, ahora.<br />
+          Empezá con $100&nbsp;USD de respaldo y ampliá tu límite con más dólares cuando quieras.
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="vendor/gsap.min.js" defer></script>
+  <script src="vendor/ScrollTrigger.min.js" defer></script>
+  <script src="vendor/lenis.min.js" defer></script>
+  <script src="smooth-scroll.js" defer></script>
+  <script src="main.js" defer></script>
+  <script src="sequence.js" defer></script>
+</body>
+</html>

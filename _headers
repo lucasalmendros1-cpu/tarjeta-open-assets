@@ -1,0 +1,10 @@
+# Headers for Netlify / Cloudflare Pages (other hosts: set the same CORS + cache rules).
+# Webflow loads the card frames with fetch() and the fonts cross-origin: CORS is required.
+/*
+  Access-Control-Allow-Origin: *
+
+/assets/*
+  Cache-Control: public, max-age=2592000
+
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
