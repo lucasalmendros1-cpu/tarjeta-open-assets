@@ -239,6 +239,9 @@ html.lenis, html.lenis body { height: auto; }
   background-position: var(--sheen, 0%) 0;
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+/* Same background as .orbit, on the pinned block too: once pinned it is its own layer, and the
+   phone frames' "lighten" blend (sequence.js) has to see this colour behind the cards. */
+.orbit__pin { background: var(--bg); }
 .orbit__pin.is-compact { justify-content: center; }   /* portrait: set by sequence.js, which also sets the lead's gap */
 .orbit__canvas { position: absolute; inset: 0; z-index: 5; pointer-events: none; } /* cards sit above title and lead */
 .orbit__canvas canvas { display: block; width: 100%; height: 100%; }

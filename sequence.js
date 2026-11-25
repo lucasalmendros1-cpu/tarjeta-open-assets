@@ -36,9 +36,15 @@ gsap.registerPlugin(ScrollTrigger);
    ~1000 device px wide anyway, and each frame costs ~2.5× less to download and decode. */
 const SMALL = Math.min(window.innerWidth, (window.screen && window.screen.width) || Infinity) <= 820;
 const SEQ_DIR = SMALL ? SEQ_BASE + "m/" : SEQ_BASE;
-/* Phones also play every other frame (240 + 54) and cross-fade between them: half the
-   download (the motion is complete much sooner on a fresh load) and half the decoding. */
-const STEP = SMALL ? 2 : 1;
+/* Every frame on every device. (Phones briefly played every other frame cross-faded: lighter,
+   but the blended doubles read as low fps.) Instead, on phones the cards wait as a still image
+   until all frames are in (see POSTER). STEP stays as a knob; the pack must match it. */
+const STEP = 1;
+/* If the visitor reaches the cards before all frames have downloaded, the first loop frame is
+   shown still, and the motion starts once every loop frame is in, from that same frame — never
+   an empty gap or a half-loaded, stuttering spin. (On a fast connection the pack is in before
+   the visitor gets there and the intro plays as usual.) */
+const POSTER = true;
 const name = (prefix, i) => `${SEQ_DIR}${prefix}${String(i * STEP).padStart(3, "0")}.webp`;
 const LOOP = { count: 480 / STEP, src: (i) => name("f_", i) };
 const INTRO = { count: 108 / STEP, src: (i) => name("intro_", i) };
@@ -68,6 +74,12 @@ const canvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d");
 host.appendChild(canvas);
 host.style.opacity = "0";
+// Phone frames have no transparency (7 MB instead of 17): they are pre-painted on #0b0913,
+// a touch darker than the section background. "lighten" lets the background and the title
+// win wherever the frame is just that dark, so the opaque frame looks transparent.
+// (Set on the host, not the canvas: the host is its own stacking context, and a blended
+// canvas inside it would only blend with the empty host.)
+if (SMALL) host.style.mixBlendMode = "lighten";
 
 /* ---------------- Frames ---------------- */
 // Frames are kept as compressed Blobs (~50 KB each). Decoding hundreds up front would
@@ -139,6 +151,13 @@ async function loadPack() {
 // The intro did not make it in time and the loop plays instead: fetch the loop first.
 function preferLoop() { queue.sort((a, b) => (a[0] === LOOP ? 0 : 1) - (b[0] === LOOP ? 0 : 1)); }
 const introReady = () => INTRO.ready.every(Boolean);
+const loopReady = () => LOOP.ready.every(Boolean);
+// the still frame for phones: a single small request, fetched right away
+if (POSTER) {
+  fetch(LOOP.src(0)).then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
+    .then((b) => { if (!LOOP.ready[0]) { LOOP.imgs[0] = b; LOOP.ready[0] = 1; } dirty = true; pump(); })
+    .catch(() => {});
+}
 
 /* ---------------- Layout: cards just step on "Crédito", above the lead ----------------
  * Performance: the canvas covers only the frame (not the whole viewport) and its
@@ -176,7 +195,10 @@ function layout() {
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const scale = Math.min(dpr, SRC_W / fw);              // device px per css px, capped at the source
-  const nbw = Math.round(fw * scale), nbh = Math.round(fh * scale);
+  // Phones: the backing store is exactly the frame size (1000×500) and the browser scales the
+  // canvas element. Frames are then drawn 1:1 (no per-frame resampling, which is slow in
+  // Safari) and the decoded bitmaps never have to be redone when the toolbar resizes the page.
+  const nbw = SMALL ? SRC_W : Math.round(fw * scale), nbh = SMALL ? SRC_W / FRAME_ASPECT : Math.round(fh * scale);
   Object.assign(canvas.style, {
     position: "absolute", left: rect.x + "px", top: rect.y + "px",
     width: fw + "px", height: fh + "px",
@@ -196,7 +218,8 @@ function layout() {
  * Instead, frames around the play head are decoded ahead of time with
  * createImageBitmap (off-thread), already at the exact size they are drawn, and
  * kept in a small cache (~24 frames). Drawing a bitmap is a plain GPU blit. */
-const BMP_CAP = 40, AHEAD = 14, FAR = 40, BEHIND = 5, MAX_DECODES = 4;
+// phones keep fewer decoded frames in memory (each is 2 MB of GPU memory at 1000×500)
+const BMP_CAP = SMALL ? 26 : 40, AHEAD = SMALL ? 10 : 14, FAR = SMALL ? 22 : 40, BEHIND = SMALL ? 3 : 5, MAX_DECODES = SMALL ? 3 : 4;
 const bmps = new Map();          // key -> ImageBitmap
 const decodingKeys = new Set();
 let wanted = [];                 // [seq, i] in priority order
@@ -235,7 +258,7 @@ function pump() {
     if (bmps.has(k) || decodingKeys.has(k) || !seq.ready[i]) continue;
     decodingKeys.add(k);
     const w0 = bw, h0 = bh;
-    const opts = resizeOK ? { resizeWidth: bw, resizeHeight: bh, resizeQuality: "high" } : undefined;
+    const opts = resizeOK && !SMALL ? { resizeWidth: bw, resizeHeight: bh, resizeQuality: "high" } : undefined;
     createImageBitmap(seq.imgs[i], opts)
       .catch(() => { resizeOK = false; return createImageBitmap(seq.imgs[i]); })
       .then((b) => {
@@ -310,12 +333,24 @@ function draw(seq, frameF, wrap) {
 }
 
 /* ---------------- Motion ---------------- */
-// mode: "hidden" → "intro" → "loop"
+// mode: "hidden" → "intro" → "loop"   (phones, frames still downloading: "hidden" → "poster" → "loop")
 const state = { mode: "hidden", introStart: 0, idle: 0, scroll: 0, scrollTarget: 0 };
 let dirty = true, lastKey = "";
 
 function frame(now, dt) {
   state.scroll += (state.scrollTarget - state.scroll) * (1 - Math.exp(-dt * 3.5));
+
+  if (state.mode === "poster") {
+    if (loopReady()) {
+      // every frame is in: start moving from the frame on screen (loop frame 0)
+      state.mode = "loop";
+      state.idle = -state.scroll;
+      lastBase = -1; dirty = true;
+    } else {
+      if (dirty) { draw(LOOP, 0, true); lastKey = "p"; dirty = false; }
+      return;
+    }
+  }
 
   if (state.mode === "intro") {
     const f = ((now - state.introStart) / 1000) * INTRO_FPS;
@@ -352,7 +387,14 @@ function stopLoop() { running = false; }
 // Start fetching well before the section is reached. The section sits right under the hero,
 // so ~600 frame requests at full speed would compete with the hero video: until the video can
 // play (or the visitor scrolls, or 6 s pass) frames come in slowly (see maxInFlight).
-const settle = () => { if (heroSettled) return; heroSettled = true; if (loadingStarted) nextFetch(); };
+// Phones: the pack waits for the hero video entirely (they share a slower connection, and the
+// still frame covers the cards meanwhile). Desktop starts it at once, at low priority.
+let nearSection = false;
+const settle = () => {
+  if (heroSettled) return;
+  heroSettled = true;
+  if (loadingStarted) nextFetch(); else if (SMALL && nearSection) startLoading();
+};
 const heroVideo = document.querySelector("[data-hero-video]");
 if (!heroVideo || heroVideo.readyState >= 4) heroSettled = true;
 else {
@@ -362,7 +404,10 @@ else {
   const onScroll = () => { if (window.scrollY > window.innerHeight * 0.25) { window.removeEventListener("scroll", onScroll); settle(); } };
   window.addEventListener("scroll", onScroll, { passive: true });
 }
-new IntersectionObserver(([e]) => { if (e.isIntersecting) startLoading(); }, { rootMargin: "200% 0px" }).observe(section);
+new IntersectionObserver(([e]) => {
+  nearSection = e.isIntersecting;
+  if (nearSection && (!SMALL || heroSettled)) startLoading();
+}, { rootMargin: "200% 0px" }).observe(section);
 // render only while visible
 new IntersectionObserver(([e]) => { e.isIntersecting ? startLoop() : stopLoop(); }, { rootMargin: "10% 0px" }).observe(section);
 
@@ -388,6 +433,12 @@ function enterCards() {
   if (reduce) {
     state.mode = "loop"; state.idle = -state.scroll; dirty = true;
     gsap.to(host, { opacity: 1, duration: 0.6, ease: "power1.out" });
+    return;
+  }
+  if (POSTER && !(loopReady() && introReady())) {
+    // phones, frames still downloading: the still cards now, the motion once everything is in
+    state.mode = "poster"; lastBase = -1; dirty = true;
+    gsap.fromTo(host, { opacity: 0, y: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" });
     return;
   }
   gsap.set(host, { opacity: 1, y: 0 });
